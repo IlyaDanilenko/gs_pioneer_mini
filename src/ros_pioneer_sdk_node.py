@@ -46,9 +46,10 @@ class PioneerMiniNode():
     def handle_local_pos(self, req):
         request_position = [req.position.x,req.position.y,req.position.z]
         if request_position != self.state_position:
-            self.board.go_to_local_point(request_position[0], request_position[1], request_position[3])
+            self.board.go_to_local_point(x=request_position[0], y=request_position[1], z=request_position[2], yaw=0.0)
             if self.board.point_reached():
                 self.state_callback_event = 42
+                self.state_position = request_position
                 return PositionResponse(True)
         return PositionResponse(True)
 
@@ -66,7 +67,7 @@ class PioneerMiniNode():
         self.event_service = Service("geoscan/flight/set_event", Event, self.handle_event)
 
         self.altitude_publisher = Publisher("geoscan/sensors/altitude", Float32, queue_size=10)
-        self.image_publisher = Publisher("pioneer_mini_camera/image_raw", Image, queue_size=10)
+        # self.image_publisher = Publisher("pioneer_mini_camera/image_raw", Image, queue_size=10)
         self.callback_event_publisher = Publisher("geoscan/flight/callback_event", Int32, queue_size=10)
 
         for _ in range(0,4):
@@ -87,7 +88,7 @@ class PioneerMiniNode():
 
     def spin(self):
         self.altitude_publisher.publish(self.__get_altitude())
-        self.image_publisher.publish(self.__get_image())
+        # self.image_publisher.publish(self.__get_image())
         
         if self.rate is not None:
             self.rate.sleep()
