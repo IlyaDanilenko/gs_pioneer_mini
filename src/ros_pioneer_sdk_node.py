@@ -12,27 +12,28 @@ from gs_interfaces.srv import Led, LedResponse
 from gs_interfaces.srv import Event, EventResponse
 from std_msgs.msg import ColorRGBA, Float32, Int32
 from sensor_msgs.msg import Image
+from threading import Thread
 
 class PioneerMiniNode():
+    def __threading_target(self, event):
+        if event == 0:
+            self.board.arm()
+            self.state_callback_event = 56
+        elif event == 1:
+            self.board.takeoff()
+            self.state_callback_event = 51
+        elif event == 2:
+            self.board.land()
+            self.state_callback_event = 26
+        elif event == 3:
+            self.board.disarm()
+            self.state_callback_event = 26
+        self.callback_event_publisher.publish(self.state_callback_event)
+
     def handle_event(self, req):
         if self.state_event != req.event:
-            # send_log(f"send: Event - {req.event}")
-            if req.event == 0:
-                self.board.arm()
-                self.state_callback_event = 56
-            elif req.event == 1:
-                self.board.takeoff()
-                self.state_callback_event = 51
-            elif req.event == 2:
-                self.board.land()
-                self.state_callback_event = 26
-            elif req.event == 3:
-                self.board.disarm()
-                self.state_callback_event = 26
-            else:
-                return EventResponse(0)
+            Thread(target=self.__threading_target, args=(req.event,), daemon=True).start()
             self.state_event = req.event
-            self.callback_event_publisher.publish(self.state_callback_event)
         return EventResponse(1)
 
     def handle_board_led(self, req):
