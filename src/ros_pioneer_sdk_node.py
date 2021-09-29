@@ -10,12 +10,13 @@ import numpy as np
 from gs_interfaces.srv import Position, PositionResponse
 from gs_interfaces.srv import Led, LedResponse
 from gs_interfaces.srv import Event, EventResponse
+from gs_interfaces.srv import Yaw, YawResponse
 from std_msgs.msg import ColorRGBA, Float32, Int32
 from sensor_msgs.msg import Image
 from threading import Thread
 
 class PioneerMiniNode():
-    def __threading_target(self, event):
+    def __threading_event_target(self, event):
         if event == 0:
             self.board.arm()
             self.state_callback_event = 56
@@ -30,29 +31,36 @@ class PioneerMiniNode():
             self.state_callback_event = 26
         self.callback_event_publisher.publish(self.state_callback_event)
 
-    def handle_event(self, req):
-        if self.state_event != req.event:
-            Thread(target=self.__threading_target, args=(req.event,), daemon=True).start()
-            self.state_event = req.event
+    def __threading_point_reached_target(self):
+        if self.board.point_reached():
+            self.state_callback_event = 42
+            self.callback_event_publisher.publish(self.state_callback_event)
+
+    def handle_event(self, request):
+        if self.state_event != request.event:
+            Thread(target=self.__threading_event_target, args=(request.event,), daemon=True).start()
+            self.state_event = request.event
         return EventResponse(1)
 
-    def handle_board_led(self, req):
-        if req.leds != self.state_board_led:
-            for i in range(0, len(req.leds)):
-                if req.leds[i] != self.state_board_led[i]:
-                    self.board.led_control(i, req.leds[0], req.leds[1], req.leds[2])
-                    self.state_board_led[i] = req.leds[i]
+    def handle_board_led(self, request):
+        if request.leds != self.state_board_led:
+            for i in range(0, len(request.leds)):
+                if request.leds[i] != self.state_board_led[i]:
+                    self.board.led_control(i, request.leds[0], request.leds[1], request.leds[2])
+                    self.state_board_led[i] = request.leds[i]
         return LedResponse(True)
 
-    def handle_local_pos(self, req):
-        request_position = [req.position.x,req.position.y,req.position.z]
+    def handle_local_pos(self, request):
+        request_position = [request.position.x,request.position.y,request.position.z]
         if request_position != self.state_position:
-            self.board.go_to_local_point(x=request_position[0], y=request_position[1], z=request_position[2], yaw=0.0)
-            if self.board.point_reached():
-                self.state_callback_event = 42
-                self.state_position = request_position
-                return PositionResponse(True)
+            self.board.go_to_local_point(x = request_position[0], y = request_position[1], z = request_position[2], yaw = 0.0)
+            self.state_position = request_position
+            Thread(target=self.__threading_point_reached_target).start()
         return PositionResponse(True)
+
+    def handle_yaw(self, request):
+        self.board.go_to_local_point(x = self.state_position[0], y = self.state_position[1], z = self.state_position[2], yaw = request.angle)
+        return YawResponse(True)
 
     def __init__(self, rate = None):
         self.state_event = -1
@@ -66,6 +74,7 @@ class PioneerMiniNode():
         self.local_position_service = Service("geoscan/flight/set_local_position", Position, self.handle_local_pos)
         self.board_led_service = Service("geoscan/led/board/set", Led, self.handle_board_led)
         self.event_service = Service("geoscan/flight/set_event", Event, self.handle_event)
+        self.yaw_service = Service("geoscan/flight/set_yaw", Yaw, self.handle_yaw)
 
         self.altitude_publisher = Publisher("geoscan/sensors/altitude", Float32, queue_size=10)
         # self.image_publisher = Publisher("pioneer_mini_camera/image_raw", Image, queue_size=10)
